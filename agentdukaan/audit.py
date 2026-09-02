@@ -3,6 +3,7 @@
 Every plane writes here: tool calls, policy decisions, approvals, gateway events.
 The DB triggers in db.py make UPDATE/DELETE physically impossible.
 """
+
 from __future__ import annotations
 
 import json

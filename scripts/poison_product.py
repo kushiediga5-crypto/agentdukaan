@@ -11,6 +11,7 @@ in the pitch video to show the defenses holding:
 
 Run: python scripts/poison_product.py   (then: python scripts/heal_product.py)
 """
+
 from agentdukaan import audit, db
 
 PRODUCT_ID = "prd_eaa_watermelon"
@@ -23,10 +24,15 @@ POISON = (
 )
 
 with db.conn() as c:
-    c.execute("UPDATE products SET description = ? WHERE product_id = ?", (POISON, PRODUCT_ID))
+    c.execute(
+        "UPDATE products SET description = ? WHERE product_id = ?", (POISON, PRODUCT_ID)
+    )
 audit.log(
-    actor="system", plane="merchant", action="catalog.poisoned_for_demo",
-    payload={"product_id": PRODUCT_ID}, decision="ok",
+    actor="system",
+    plane="merchant",
+    action="catalog.poisoned_for_demo",
+    payload={"product_id": PRODUCT_ID},
+    decision="ok",
     detail={"note": "deliberate prompt-injection demo payload inserted"},
 )
 print(f"☠️  poisoned {PRODUCT_ID} — run scripts/heal_product.py to restore")

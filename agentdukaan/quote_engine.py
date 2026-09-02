@@ -8,15 +8,23 @@ GST math (India, GST-inclusive unit prices):
     line_taxable = round(line_total * 10000 / (10000 + gst_rate_bps))
     line_gst     = line_total - line_taxable
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-METRO_PREFIXES = {"110", "400", "560", "600", "700", "500"}  # Delhi, Mumbai, Blr, Chennai, Kolkata, Hyd
+METRO_PREFIXES = {
+    "110",
+    "400",
+    "560",
+    "600",
+    "700",
+    "500",
+}  # Delhi, Mumbai, Blr, Chennai, Kolkata, Hyd
 FREE_SHIPPING_THRESHOLD_PAISE = 99_900  # ₹999
-SHIPPING_METRO_PAISE = 4_900             # ₹49
-SHIPPING_REST_PAISE = 7_900              # ₹79
+SHIPPING_METRO_PAISE = 4_900  # ₹49
+SHIPPING_REST_PAISE = 7_900  # ₹79
 MAX_QTY_PER_LINE = 10
 
 _PINCODE_RE = re.compile(r"^[1-9][0-9]{5}$")
@@ -52,7 +60,11 @@ def shipping_zone(pincode: str) -> str:
 def shipping_fee(subtotal_paise: int, pincode: str) -> int:
     if subtotal_paise >= FREE_SHIPPING_THRESHOLD_PAISE:
         return 0
-    return SHIPPING_METRO_PAISE if shipping_zone(pincode) == "metro" else SHIPPING_REST_PAISE
+    return (
+        SHIPPING_METRO_PAISE
+        if shipping_zone(pincode) == "metro"
+        else SHIPPING_REST_PAISE
+    )
 
 
 def _gst_split(line_total_paise: int, gst_rate_bps: int) -> tuple[int, int]:
@@ -74,7 +86,12 @@ def build_lines(items: list[dict], catalog_lookup) -> list[QuoteLine]:
         qty = item.get("qty", 1)
         if not pid:
             raise QuoteError("each item needs a product_id")
-        if not isinstance(qty, int) or isinstance(qty, bool) or qty < 1 or qty > MAX_QTY_PER_LINE:
+        if (
+            not isinstance(qty, int)
+            or isinstance(qty, bool)
+            or qty < 1
+            or qty > MAX_QTY_PER_LINE
+        ):
             raise QuoteError(f"qty for {pid} must be an integer 1..{MAX_QTY_PER_LINE}")
         if pid in seen:
             raise QuoteError(f"duplicate line item for {pid}; merge quantities instead")

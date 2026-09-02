@@ -4,6 +4,7 @@ Schema notes:
   - audit_log is APPEND-ONLY, enforced by triggers (no UPDATE / no DELETE).
   - orders.idempotency_key is UNIQUE: the database itself rejects double-creates.
 """
+
 from __future__ import annotations
 
 import sqlite3

@@ -3,6 +3,7 @@
 This is the same code path the MCP tools expose — proving the agent surface
 cannot create a double-charge even under replayed calls.
 """
+
 from agentdukaan.service import Commerce
 
 
@@ -17,7 +18,8 @@ def test_full_purchase_loop():
     pid = found["results"][0]["product_id"]
 
     quote = c.quote_order(
-        [{"product_id": pid, "qty": 1}, {"product_id": "prd_shaker", "qty": 1}], "600001"
+        [{"product_id": pid, "qty": 1}, {"product_id": "prd_shaker", "qty": 1}],
+        "600001",
     )
     assert quote["ok"], quote
     assert quote["totals"]["total_paise"] == (
@@ -37,7 +39,9 @@ def test_full_purchase_loop():
     assert pay2["status"] == "pending_approval"
     assert pay2["approval_id"] == approval_id
 
-    decision = c.decide_approval(approval_id=approval_id, approved=True, approver="test-human")
+    decision = c.decide_approval(
+        approval_id=approval_id, approved=True, approver="test-human"
+    )
     assert decision["ok"] and decision["status"] == "paid"
     assert decision["order"]["razorpay_payment_id"]
 
@@ -45,8 +49,12 @@ def test_full_purchase_loop():
     assert final["order"]["status"] == "paid"
     # The timeline must tell the full story: quote → order → payment → approval.
     actions = {e["action"] for e in final["order"]["timeline"]}
-    assert {"quote_order", "create_order", "request_payment",
-            "approval.decision"} <= actions
+    assert {
+        "quote_order",
+        "create_order",
+        "request_payment",
+        "approval.decision",
+    } <= actions
 
 
 def test_create_order_idempotent_replay():

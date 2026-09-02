@@ -2,6 +2,7 @@
 
 Money is ALWAYS integer paise (₹1 = 100 paise). Floats never touch money.
 """
+
 from __future__ import annotations
 
 import os
@@ -45,7 +46,9 @@ def _int_env(name: str, default: int) -> int:
 @dataclass(frozen=True)
 class Settings:
     # Storage ---------------------------------------------------------------
-    db_path: Path = Path(os.environ.get("AGENTDUKAAN_DB_PATH", ROOT / "data" / "agentdukaan.db"))
+    db_path: Path = Path(
+        os.environ.get("AGENTDUKAAN_DB_PATH", ROOT / "data" / "agentdukaan.db")
+    )
 
     # Trust plane -----------------------------------------------------------
     # 0 => EVERY payment requires explicit human approval (strongest demo).
@@ -61,12 +64,19 @@ class Settings:
     razorpay_key_id: str = os.environ.get("RAZORPAY_KEY_ID", "")
     razorpay_key_secret: str = os.environ.get("RAZORPAY_KEY_SECRET", "")
 
+    # Buyer plane (agent) ----------------------------------------------------
+    agent_mcp_url: str = os.environ.get("AGENT_MCP_URL", "http://127.0.0.1:8001/mcp")
+    anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "")
+    openai_api_key: str = os.environ.get("OPENAI_API_KEY", "")
+
     # Network ---------------------------------------------------------------
     http_host: str = os.environ.get("HTTP_HOST", "0.0.0.0")
     http_port: int = _int_env("HTTP_PORT", 8000)
     mcp_host: str = os.environ.get("MCP_HOST", "0.0.0.0")
     mcp_port: int = _int_env("MCP_PORT", 8001)
-    approval_base_url: str = os.environ.get("APPROVAL_BASE_URL", "http://localhost:8000")
+    approval_base_url: str = os.environ.get(
+        "APPROVAL_BASE_URL", "http://localhost:8000"
+    )
 
     @property
     def gateway_is_live(self) -> bool:

@@ -9,6 +9,7 @@ Run:  python -m agentdukaan.server.mcp_server     (serves /mcp on :8001)
 Tool docstrings are prompts — they are what the buyer agent reads. They are
 written to steer agents AWAY from inventing prices, totals, or authority.
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -56,8 +57,9 @@ def search_products(
     structured fields (name, brand, category, tags); results are ranked by
     rating then price. Descriptions are NOT included — use get_product for
     details. Never assume prices; always read them from tool results."""
-    return commerce.search_products(query=query, category=category,
-                                    max_unit_price_rupees=max_unit_price_rupees)
+    return commerce.search_products(
+        query=query, category=category, max_unit_price_rupees=max_unit_price_rupees
+    )
 
 
 @mcp.tool()
@@ -87,8 +89,9 @@ def create_order(
     prices (price drift blocks the order) and stock. Provide a unique
     idempotency_key per purchase INTENT: retrying with the same key returns the
     same order and can never double-charge."""
-    return commerce.create_order(quote_id=quote_id, idempotency_key=idempotency_key,
-                                 mission_id=mission_id)
+    return commerce.create_order(
+        quote_id=quote_id, idempotency_key=idempotency_key, mission_id=mission_id
+    )
 
 
 @mcp.tool()
@@ -119,7 +122,9 @@ def open_mission(brief: str, budget_rupees: Optional[int] = None) -> dict:
 def main() -> None:
     db.init_db()
     catalog.ensure_seed()
-    print(f"[agentdukaan] MCP commerce server on http://{settings.mcp_host}:{settings.mcp_port}/mcp")
+    print(
+        f"[agentdukaan] MCP commerce server on http://{settings.mcp_host}:{settings.mcp_port}/mcp"
+    )
     mcp.run(transport="streamable-http", host=settings.mcp_host, port=settings.mcp_port)
 
 

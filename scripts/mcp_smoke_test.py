@@ -6,6 +6,7 @@ Requires both servers running:
 
 Then:  python scripts/mcp_smoke_test.py
 """
+
 import asyncio
 import json
 
@@ -35,49 +36,83 @@ async def main() -> None:
 
             r = await session.call_tool("search_products", {"query": "whey isolate"})
             search = json.loads(r.content[0].text)
-            show("search", {"count": search["count"],
-                            "top": search["results"][0]["name"]})
+            show(
+                "search",
+                {"count": search["count"], "top": search["results"][0]["name"]},
+            )
             pid = search["results"][0]["product_id"]
 
-            r = await session.call_tool("quote_order", {
-                "items": [{"product_id": pid, "qty": 1}, {"product_id": "prd_shaker", "qty": 1}],
-                "pincode": "600001",
-            })
+            r = await session.call_tool(
+                "quote_order",
+                {
+                    "items": [
+                        {"product_id": pid, "qty": 1},
+                        {"product_id": "prd_shaker", "qty": 1},
+                    ],
+                    "pincode": "600001",
+                },
+            )
             quote = json.loads(r.content[0].text)
             show("quote", quote["totals"])
 
-            r = await session.call_tool("create_order", {
-                "quote_id": quote["quote_id"], "idempotency_key": f"smoke-{quote['quote_id']}"},
+            r = await session.call_tool(
+                "create_order",
+                {
+                    "quote_id": quote["quote_id"],
+                    "idempotency_key": f"smoke-{quote['quote_id']}",
+                },
             )
             order = json.loads(r.content[0].text)
-            show("order", {"order_id": order["order"]["order_id"],
-                            "total": order["order"]["total_rupees"],
-                            "status": order["order"]["status"]})
+            show(
+                "order",
+                {
+                    "order_id": order["order"]["order_id"],
+                    "total": order["order"]["total_rupees"],
+                    "status": order["order"]["status"],
+                },
+            )
             oid = order["order"]["order_id"]
 
             r = await session.call_tool("request_payment", {"order_id": oid})
             pay = json.loads(r.content[0].text)
-            show("payment request (agent can only get PENDING)", {
-                "status": pay["status"], "approval_id": pay.get("approval_id"),
-                "note": pay.get("note"),
-            })
+            show(
+                "payment request (agent can only get PENDING)",
+                {
+                    "status": pay["status"],
+                    "approval_id": pay.get("approval_id"),
+                    "note": pay.get("note"),
+                },
+            )
 
             if pay.get("approval_id"):
                 resp = httpx.post(
                     f"{API}/api/approvals/{pay['approval_id']}",
-                    params={"approved": "true", "approver": "smoke-test-human"}, timeout=10,
+                    params={"approved": "true", "approver": "smoke-test-human"},
+                    timeout=10,
                 )
-                show("HUMAN approves (the only path to money)", {
-                    "status": resp.json().get("status"),
-                    "payment_ref": (resp.json().get("order") or {}).get("razorpay_payment_id"),
-                })
+                show(
+                    "HUMAN approves (the only path to money)",
+                    {
+                        "status": resp.json().get("status"),
+                        "payment_ref": (resp.json().get("order") or {}).get(
+                            "razorpay_payment_id"
+                        ),
+                    },
+                )
 
             r = await session.call_tool("get_order_status", {"order_id": oid})
             final = json.loads(r.content[0].text)
-            show("final", {"status": final["order"]["status"],
-                            "audited_events": len(final["order"]["timeline"])})
+            show(
+                "final",
+                {
+                    "status": final["order"]["status"],
+                    "audited_events": len(final["order"]["timeline"]),
+                },
+            )
             assert final["order"]["status"] == "paid", "loop did not complete!"
-            print("\n🎉 FULL AGENT PURCHASE LOOP COMPLETE — agent bought, human gated, ledger saw all.")
+            print(
+                "\n🎉 FULL AGENT PURCHASE LOOP COMPLETE — agent bought, human gated, ledger saw all."
+            )
 
 
 if __name__ == "__main__":

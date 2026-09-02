@@ -11,6 +11,7 @@ this class. Rules that hold everywhere:
     gateway.
   * Everything writes to the append-only audit ledger, with reasons.
 """
+
 from __future__ import annotations
 
 import json
@@ -63,9 +64,16 @@ class Commerce:
     ) -> dict:
         results = catalog.search(query, category, max_unit_price_rupees, in_stock_only)
         seq = audit.log(
-            actor="agent", plane="merchant", action="search_products",
-            payload={"query": query, "category": category, "max_price": max_unit_price_rupees},
-            decision="ok", detail={"matches": len(results)},
+            actor="agent",
+            plane="merchant",
+            action="search_products",
+            payload={
+                "query": query,
+                "category": category,
+                "max_price": max_unit_price_rupees,
+            },
+            decision="ok",
+            detail={"matches": len(results)},
         )
         return {"ok": True, "audit_seq": seq, "count": len(results), "results": results}
 
@@ -73,14 +81,20 @@ class Commerce:
         product = catalog.get(product_id)
         if product is None:
             seq = audit.log(
-                actor="agent", plane="merchant", action="get_product",
-                payload={"product_id": product_id}, decision="error",
+                actor="agent",
+                plane="merchant",
+                action="get_product",
+                payload={"product_id": product_id},
+                decision="error",
                 detail={"reason": "not_found"},
             )
             return {"ok": False, "audit_seq": seq, "error": "product_not_found"}
         seq = audit.log(
-            actor="agent", plane="merchant", action="get_product",
-            payload={"product_id": product_id}, decision="ok",
+            actor="agent",
+            plane="merchant",
+            action="get_product",
+            payload={"product_id": product_id},
+            decision="ok",
         )
         return {"ok": True, "audit_seq": seq, "product": product}
 
@@ -92,8 +106,11 @@ class Commerce:
             t = quote_engine.totals(lines, pin)
         except quote_engine.QuoteError as exc:
             seq = audit.log(
-                actor="agent", plane="merchant", action="quote_order",
-                payload={"items": items, "pincode": pincode}, decision="error",
+                actor="agent",
+                plane="merchant",
+                action="quote_order",
+                payload={"items": items, "pincode": pincode},
+                decision="error",
                 detail={"reason": str(exc)},
             )
             return {"ok": False, "audit_seq": seq, "error": str(exc)}
@@ -113,11 +130,23 @@ class Commerce:
                 "INSERT INTO quotes (quote_id, pincode, items_json, subtotal_paise, gst_paise,"
                 " shipping_paise, total_paise, status, created_at, expires_at)"
                 " VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (quote_id, pin, items_json, t["subtotal_paise"], t["gst_paise"],
-                 t["shipping_paise"], t["total_paise"], "open", now, expires),
+                (
+                    quote_id,
+                    pin,
+                    items_json,
+                    t["subtotal_paise"],
+                    t["gst_paise"],
+                    t["shipping_paise"],
+                    t["total_paise"],
+                    "open",
+                    now,
+                    expires,
+                ),
             )
         seq = audit.log(
-            actor="agent", plane="merchant", action="quote_order",
+            actor="agent",
+            plane="merchant",
+            action="quote_order",
             payload={"quote_id": quote_id, "items": items, "pincode": pin},
             decision="ok",
             detail={"total_paise": t["total_paise"], "zone": t["zone"]},
@@ -144,7 +173,9 @@ class Commerce:
         }
 
     # ----------------------------------------------------------------- order
-    def create_order(self, quote_id: str, idempotency_key: str, mission_id: str | None = None) -> dict:
+    def create_order(
+        self, quote_id: str, idempotency_key: str, mission_id: str | None = None
+    ) -> dict:
         if not idempotency_key or len(idempotency_key) > 128:
             return {"ok": False, "error": "idempotency_key required (1..128 chars)"}
 
@@ -156,15 +187,24 @@ class Commerce:
             ).fetchone()
         if existing:
             seq = audit.log(
-                actor="agent", plane="merchant", action="create_order",
-                payload={"idempotency_key": idempotency_key}, decision="ok",
+                actor="agent",
+                plane="merchant",
+                action="create_order",
+                payload={"idempotency_key": idempotency_key},
+                decision="ok",
                 detail={"idempotent_replay": True, "order_id": existing["order_id"]},
             )
-            return {"ok": True, "audit_seq": seq, "order": self._order_dict(existing),
-                    "idempotent_replay": True}
+            return {
+                "ok": True,
+                "audit_seq": seq,
+                "order": self._order_dict(existing),
+                "idempotent_replay": True,
+            }
 
         with db.conn() as c:
-            quote = c.execute("SELECT * FROM quotes WHERE quote_id = ?", (quote_id,)).fetchone()
+            quote = c.execute(
+                "SELECT * FROM quotes WHERE quote_id = ?", (quote_id,)
+            ).fetchone()
         if quote is None:
             return {"ok": False, "error": "quote_not_found"}
 
@@ -172,12 +212,23 @@ class Commerce:
         now = db.utcnow()
         if quote["status"] != "open" or now >= quote["expires_at"]:
             seq = audit.log(
-                actor="policy", plane="trust", action="create_order.expiry_check",
-                payload={"quote_id": quote_id}, decision="blocked",
-                detail={"reason": "QUOTE_EXPIRED", "now": now, "expires_at": quote["expires_at"]},
+                actor="policy",
+                plane="trust",
+                action="create_order.expiry_check",
+                payload={"quote_id": quote_id},
+                decision="blocked",
+                detail={
+                    "reason": "QUOTE_EXPIRED",
+                    "now": now,
+                    "expires_at": quote["expires_at"],
+                },
             )
-            return {"ok": False, "audit_seq": seq, "error": "QUOTE_EXPIRED",
-                    "detail": "quote is no longer open — request a fresh quote"}
+            return {
+                "ok": False,
+                "audit_seq": seq,
+                "error": "QUOTE_EXPIRED",
+                "detail": "quote is no longer open — request a fresh quote",
+            }
 
         # --- Guard 2: price drift ------------------------------------------
         # Recompute the quote from LIVE catalog prices and diff against the
@@ -189,23 +240,44 @@ class Commerce:
             t = quote_engine.totals(lines, quote["pincode"])
         except quote_engine.QuoteError as exc:
             seq = audit.log(
-                actor="policy", plane="trust", action="create_order.drift_check",
-                payload={"quote_id": quote_id}, decision="blocked",
+                actor="policy",
+                plane="trust",
+                action="create_order.drift_check",
+                payload={"quote_id": quote_id},
+                decision="blocked",
                 detail={"reason": "CATALOG_CHANGED", "error": str(exc)},
             )
-            return {"ok": False, "audit_seq": seq, "error": "CATALOG_CHANGED", "detail": str(exc)}
+            return {
+                "ok": False,
+                "audit_seq": seq,
+                "error": "CATALOG_CHANGED",
+                "detail": str(exc),
+            }
 
         drift = abs(t["total_paise"] - quote["total_paise"])
         if drift > settings.price_drift_tolerance_paise:
             seq = audit.log(
-                actor="policy", plane="trust", action="create_order.drift_check",
-                payload={"quote_id": quote_id}, decision="blocked",
-                detail={"reason": "PRICE_DRIFT", "quoted_total_paise": quote["total_paise"],
-                        "live_total_paise": t["total_paise"], "drift_paise": drift},
+                actor="policy",
+                plane="trust",
+                action="create_order.drift_check",
+                payload={"quote_id": quote_id},
+                decision="blocked",
+                detail={
+                    "reason": "PRICE_DRIFT",
+                    "quoted_total_paise": quote["total_paise"],
+                    "live_total_paise": t["total_paise"],
+                    "drift_paise": drift,
+                },
             )
-            return {"ok": False, "audit_seq": seq, "error": "PRICE_DRIFT",
-                    "detail": {"quoted_total_paise": quote["total_paise"],
-                               "live_total_paise": t["total_paise"]}}
+            return {
+                "ok": False,
+                "audit_seq": seq,
+                "error": "PRICE_DRIFT",
+                "detail": {
+                    "quoted_total_paise": quote["total_paise"],
+                    "live_total_paise": t["total_paise"],
+                },
+            }
 
         # --- Guard 3: stock, atomically ------------------------------------
         order_id = _new_id("ord")
@@ -219,37 +291,70 @@ class Commerce:
                         (l.qty, l.product_id, l.qty),
                     )
                     if cur.rowcount != 1:
-                        raise quote_engine.QuoteError(f"insufficient stock for {l.product_id}")
+                        raise quote_engine.QuoteError(
+                            f"insufficient stock for {l.product_id}"
+                        )
                 c.execute(
                     "INSERT INTO orders (order_id, quote_id, items_json, total_paise, status,"
                     " idempotency_key, mission_id, created_at, updated_at)"
                     " VALUES (?,?,?,?,?,?,?,?,?)",
-                    (order_id, quote_id, quote["items_json"], t["total_paise"], "created",
-                     idempotency_key, mission_id, now, now),
+                    (
+                        order_id,
+                        quote_id,
+                        quote["items_json"],
+                        t["total_paise"],
+                        "created",
+                        idempotency_key,
+                        mission_id,
+                        now,
+                        now,
+                    ),
                 )
-                c.execute("UPDATE quotes SET status = 'consumed' WHERE quote_id = ?", (quote_id,))
+                c.execute(
+                    "UPDATE quotes SET status = 'consumed' WHERE quote_id = ?",
+                    (quote_id,),
+                )
                 c.execute("COMMIT")
         except quote_engine.QuoteError as exc:
             seq = audit.log(
-                actor="policy", plane="trust", action="create_order.stock_check",
-                payload={"quote_id": quote_id}, decision="blocked",
+                actor="policy",
+                plane="trust",
+                action="create_order.stock_check",
+                payload={"quote_id": quote_id},
+                decision="blocked",
                 detail={"reason": "OUT_OF_STOCK", "error": str(exc)},
             )
-            return {"ok": False, "audit_seq": seq, "error": "OUT_OF_STOCK", "detail": str(exc)}
+            return {
+                "ok": False,
+                "audit_seq": seq,
+                "error": "OUT_OF_STOCK",
+                "detail": str(exc),
+            }
 
         seq = audit.log(
-            actor="agent", plane="merchant", action="create_order",
-            payload={"order_id": order_id, "quote_id": quote_id, "mission_id": mission_id},
-            decision="ok", detail={"total_paise": t["total_paise"]},
+            actor="agent",
+            plane="merchant",
+            action="create_order",
+            payload={
+                "order_id": order_id,
+                "quote_id": quote_id,
+                "mission_id": mission_id,
+            },
+            decision="ok",
+            detail={"total_paise": t["total_paise"]},
         )
         with db.conn() as c:
-            order = c.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
+            order = c.execute(
+                "SELECT * FROM orders WHERE order_id = ?", (order_id,)
+            ).fetchone()
         return {"ok": True, "audit_seq": seq, "order": self._order_dict(order)}
 
     # --------------------------------------------------------------- payment
     def request_payment(self, order_id: str, mission_id: str | None = None) -> dict:
         with db.conn() as c:
-            order = c.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
+            order = c.execute(
+                "SELECT * FROM orders WHERE order_id = ?", (order_id,)
+            ).fetchone()
         if order is None:
             return {"ok": False, "error": "order_not_found"}
 
@@ -258,20 +363,37 @@ class Commerce:
             with db.conn() as c:
                 apr = c.execute(
                     "SELECT * FROM approvals WHERE order_id = ? AND status = 'pending'"
-                    " ORDER BY requested_at DESC LIMIT 1", (order_id,),
+                    " ORDER BY requested_at DESC LIMIT 1",
+                    (order_id,),
                 ).fetchone()
             if apr:
                 seq = audit.log(
-                    actor="agent", plane="trust", action="request_payment",
-                    payload={"order_id": order_id}, decision="ok",
-                    detail={"idempotent_replay": True, "approval_id": apr["approval_id"]},
-                )
-                return {"ok": True, "audit_seq": seq, "status": "pending_approval",
+                    actor="agent",
+                    plane="trust",
+                    action="request_payment",
+                    payload={"order_id": order_id},
+                    decision="ok",
+                    detail={
+                        "idempotent_replay": True,
                         "approval_id": apr["approval_id"],
-                        "approval_url": f"{_BASE}/dashboard",
-                        "idempotent_replay": True}
+                    },
+                )
+                return {
+                    "ok": True,
+                    "audit_seq": seq,
+                    "status": "pending_approval",
+                    "approval_id": apr["approval_id"],
+                    "order_id": order_id,
+                    "amount_rupees": round(apr["amount_paise"] / 100, 2),
+                    "approval_url": f"{_BASE}/dashboard",
+                    "idempotent_replay": True,
+                }
         if order["status"] == "paid":
-            return {"ok": True, "status": "already_paid", "order": self._order_dict(order)}
+            return {
+                "ok": True,
+                "status": "already_paid",
+                "order": self._order_dict(order),
+            }
 
         mission, buyer = None, None
         with db.conn() as c:
@@ -294,7 +416,9 @@ class Commerce:
 
         if not decision.approved:
             seq = audit.log(
-                actor="policy", plane="trust", action="request_payment",
+                actor="policy",
+                plane="trust",
+                action="request_payment",
                 payload={"order_id": order_id, "amount_paise": order["total_paise"]},
                 decision="blocked",
                 detail={
@@ -302,10 +426,14 @@ class Commerce:
                     "checks": [c.as_dict() for c in decision.checks],
                 },
             )
-            return {"ok": False, "audit_seq": seq, "status": "blocked",
-                    "block_reason": decision.block_reason,
-                    "checks": [c.as_dict() for c in decision.checks],
-                    "next_step": "escalate to the human; do not retry without new instructions"}
+            return {
+                "ok": False,
+                "audit_seq": seq,
+                "status": "blocked",
+                "block_reason": decision.block_reason,
+                "checks": [c.as_dict() for c in decision.checks],
+                "next_step": "escalate to the human; do not retry without new instructions",
+            }
 
         # Approved to SEEK human approval (never to take money).
         approval_id = _new_id("apr")
@@ -313,81 +441,125 @@ class Commerce:
         from datetime import datetime, timedelta, timezone
 
         expires = (
-            datetime.now(timezone.utc) + timedelta(seconds=settings.approval_ttl_seconds)
+            datetime.now(timezone.utc)
+            + timedelta(seconds=settings.approval_ttl_seconds)
         ).isoformat(timespec="seconds")
         with db.conn() as c:
             c.execute(
                 "INSERT INTO approvals (approval_id, order_id, amount_paise, status, reason,"
                 " requested_at, expires_at) VALUES (?,?,?,?,?,?,?)",
-                (approval_id, order_id, order["total_paise"], "pending",
-                 "payment request from agent", now, expires),
+                (
+                    approval_id,
+                    order_id,
+                    order["total_paise"],
+                    "pending",
+                    "payment request from agent",
+                    now,
+                    expires,
+                ),
             )
             c.execute(
                 "UPDATE orders SET status = 'awaiting_approval', updated_at = ?"
-                " WHERE order_id = ?", (now, order_id),
+                " WHERE order_id = ?",
+                (now, order_id),
             )
         seq = audit.log(
-            actor="agent", plane="trust", action="request_payment",
-            payload={"order_id": order_id, "amount_paise": order["total_paise"],
-                     "mission_id": mission_id},
+            actor="agent",
+            plane="trust",
+            action="request_payment",
+            payload={
+                "order_id": order_id,
+                "amount_paise": order["total_paise"],
+                "mission_id": mission_id,
+            },
             decision="pending",
-            detail={"approval_id": approval_id, "expires_at": expires,
-                    "checks": [c.as_dict() for c in decision.checks]},
+            detail={
+                "approval_id": approval_id,
+                "expires_at": expires,
+                "checks": [c.as_dict() for c in decision.checks],
+            },
         )
         return {
             "ok": True,
             "audit_seq": seq,
             "status": "pending_approval",
             "approval_id": approval_id,
+            "order_id": order_id,
+            "amount_rupees": round(order["total_paise"] / 100, 2),
             "approval_url": f"{_BASE}/dashboard",
             "expires_at": expires,
             "note": "A human must approve. Poll get_order_status until decided.",
         }
 
-    def decide_approval(self, approval_id: str, approved: bool, approver: str = "human") -> dict:
+    def decide_approval(
+        self, approval_id: str, approved: bool, approver: str = "human"
+    ) -> dict:
         """HUMAN-ONLY operation. Not exposed as an MCP tool — the agent cannot
         call this. Surfaced via the HTTP dashboard / API for a real person."""
         with db.conn() as c:
-            apr = c.execute("SELECT * FROM approvals WHERE approval_id = ?", (approval_id,)).fetchone()
+            apr = c.execute(
+                "SELECT * FROM approvals WHERE approval_id = ?", (approval_id,)
+            ).fetchone()
             if apr is None:
                 return {"ok": False, "error": "approval_not_found"}
             if apr["status"] != "pending":
                 return {"ok": False, "error": f"approval_already_{apr['status']}"}
             if db.utcnow() >= apr["expires_at"]:
-                c.execute("UPDATE approvals SET status = 'expired' WHERE approval_id = ?",
-                          (approval_id,))
-                c.execute("UPDATE orders SET status = 'created', updated_at = ? WHERE order_id = ?",
-                          (db.utcnow(), apr["order_id"]))
+                c.execute(
+                    "UPDATE approvals SET status = 'expired' WHERE approval_id = ?",
+                    (approval_id,),
+                )
+                c.execute(
+                    "UPDATE orders SET status = 'created', updated_at = ? WHERE order_id = ?",
+                    (db.utcnow(), apr["order_id"]),
+                )
                 audit.log(
-                    actor="system", plane="trust", action="approval.expired",
-                    payload={"approval_id": approval_id}, decision="blocked",
+                    actor="system",
+                    plane="trust",
+                    action="approval.expired",
+                    payload={"approval_id": approval_id},
+                    decision="blocked",
                     detail={"reason": "TTL elapsed"},
                 )
                 return {"ok": False, "error": "approval_expired"}
 
-            order = c.execute("SELECT * FROM orders WHERE order_id = ?", (apr["order_id"],)).fetchone()
+            order = c.execute(
+                "SELECT * FROM orders WHERE order_id = ?", (apr["order_id"],)
+            ).fetchone()
 
         if not approved:
             now = db.utcnow()
             with db.conn() as c:
                 c.execute(
                     "UPDATE approvals SET status = 'rejected', decided_at = ?, decided_by = ?"
-                    " WHERE approval_id = ?", (now, approver, approval_id),
+                    " WHERE approval_id = ?",
+                    (now, approver, approval_id),
                 )
-                # Graceful degradation: order returns to 'created' — the agent
-                # may re-request with changed parameters, nothing is lost.
+                # The order carries a truthful 'rejected' status so the agent
+                # can tell a rejection from a pending decision. Re-requesting
+                # is allowed by policy — but every retry needs a fresh human
+                # approval, so the human stays in the loop.
                 c.execute(
-                    "UPDATE orders SET status = 'created', updated_at = ? WHERE order_id = ?",
+                    "UPDATE orders SET status = 'rejected', updated_at = ? WHERE order_id = ?",
                     (now, apr["order_id"]),
                 )
             audit.log(
-                actor="human", plane="trust", action="approval.decision",
-                payload={"approval_id": approval_id, "order_id": apr["order_id"],
-                         "amount_paise": apr["amount_paise"]},
-                decision="blocked", detail={"decision": "rejected", "by": approver},
+                actor="human",
+                plane="trust",
+                action="approval.decision",
+                payload={
+                    "approval_id": approval_id,
+                    "order_id": apr["order_id"],
+                    "amount_paise": apr["amount_paise"],
+                },
+                decision="blocked",
+                detail={"decision": "rejected", "by": approver},
             )
-            return {"ok": True, "status": "rejected",
-                    "note": "order returned to 'created'; agent may re-request or amend"}
+            return {
+                "ok": True,
+                "status": "rejected",
+                "note": "order returned to 'created'; agent may re-request or amend",
+            }
 
         # Approved by a human — NOW (and only now) do we touch the gateway.
         result = get_gateway().create_payment(dict(order))
@@ -395,13 +567,19 @@ class Commerce:
         with db.conn() as c:
             c.execute(
                 "UPDATE approvals SET status = 'approved', decided_at = ?, decided_by = ?"
-                " WHERE approval_id = ?", (now, approver, approval_id),
+                " WHERE approval_id = ?",
+                (now, approver, approval_id),
             )
             c.execute(
                 "UPDATE orders SET status = ?, updated_at = ?, razorpay_order_id = ?,"
                 " razorpay_payment_id = ? WHERE order_id = ?",
-                (result.status, now, result.ref,
-                 result.ref if result.status == "paid" else None, apr["order_id"]),
+                (
+                    result.status,
+                    now,
+                    result.ref,
+                    result.ref if result.status == "paid" else None,
+                    apr["order_id"],
+                ),
             )
             if result.status == "paid":
                 if order["mission_id"]:
@@ -411,15 +589,25 @@ class Commerce:
                     )
                 c.execute(
                     "UPDATE buyers SET spent_today_paise = spent_today_paise + ?"
-                    " WHERE buyer_id = 'buyer_demo'", (apr["amount_paise"],),
+                    " WHERE buyer_id = 'buyer_demo'",
+                    (apr["amount_paise"],),
                 )
         audit.log(
-            actor="human", plane="trust", action="approval.decision",
-            payload={"approval_id": approval_id, "order_id": apr["order_id"],
-                     "amount_paise": apr["amount_paise"]},
+            actor="human",
+            plane="trust",
+            action="approval.decision",
+            payload={
+                "approval_id": approval_id,
+                "order_id": apr["order_id"],
+                "amount_paise": apr["amount_paise"],
+            },
             decision="ok",
-            detail={"decision": "approved", "by": approver, "provider": result.provider,
-                    "ref": result.ref},
+            detail={
+                "decision": "approved",
+                "by": approver,
+                "provider": result.provider,
+                "ref": result.ref,
+            },
         )
         return {
             "ok": True,
@@ -431,7 +619,9 @@ class Commerce:
     # ---------------------------------------------------------------- status
     def get_order(self, order_id: str) -> dict:
         with db.conn() as c:
-            order = c.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
+            order = c.execute(
+                "SELECT * FROM orders WHERE order_id = ?", (order_id,)
+            ).fetchone()
             events = []
             if order:
                 # Timeline = every audited event for this order OR the quote it
@@ -445,15 +635,22 @@ class Commerce:
             return {"ok": False, "error": "order_not_found"}
         d = self._order_dict(order)
         d["timeline"] = [
-            {"seq": e["seq"], "ts": e["ts"], "actor": e["actor"], "plane": e["plane"],
-             "action": e["action"], "decision": e["decision"]}
+            {
+                "seq": e["seq"],
+                "ts": e["ts"],
+                "actor": e["actor"],
+                "plane": e["plane"],
+                "action": e["action"],
+                "decision": e["decision"],
+            }
             for e in events
         ]
         return {"ok": True, "order": d}
 
     # --------------------------------------------------------------- mission
-    def open_mission(self, brief: str, budget_rupees: int | None = None,
-                     buyer_id: str = "buyer_demo") -> dict:
+    def open_mission(
+        self, brief: str, budget_rupees: int | None = None, buyer_id: str = "buyer_demo"
+    ) -> dict:
         if not brief or len(brief) > 500:
             return {"ok": False, "error": "brief required (1..500 chars)"}
         mission_id = _new_id("msn")
@@ -465,28 +662,44 @@ class Commerce:
                 (mission_id, buyer_id, brief, budget_paise, "active", db.utcnow()),
             )
         seq = audit.log(
-            actor="agent", plane="trust", action="open_mission",
+            actor="agent",
+            plane="trust",
+            action="open_mission",
             payload={"mission_id": mission_id, "brief": brief},
-            decision="ok", detail={"budget_paise": budget_paise},
+            decision="ok",
+            detail={"budget_paise": budget_paise},
         )
-        return {"ok": True, "audit_seq": seq, "mission_id": mission_id,
-                "budget_paise": budget_paise}
+        return {
+            "ok": True,
+            "audit_seq": seq,
+            "mission_id": mission_id,
+            "budget_paise": budget_paise,
+        }
 
     # ----------------------------------------------------------------- stats
     def stats(self) -> dict:
         with db.conn() as c:
-            products = c.execute("SELECT COUNT(*) AS n FROM products WHERE active=1").fetchone()["n"]
+            products = c.execute(
+                "SELECT COUNT(*) AS n FROM products WHERE active=1"
+            ).fetchone()["n"]
             orders = c.execute("SELECT COUNT(*) AS n FROM orders").fetchone()["n"]
-            paid = c.execute("SELECT COUNT(*) AS n FROM orders WHERE status='paid'").fetchone()["n"]
+            paid = c.execute(
+                "SELECT COUNT(*) AS n FROM orders WHERE status='paid'"
+            ).fetchone()["n"]
             gmv = c.execute(
                 "SELECT COALESCE(SUM(total_paise),0) AS s FROM orders WHERE status='paid'"
             ).fetchone()["s"]
             blocked = c.execute(
-                "SELECT COUNT(*) AS n FROM audit_log WHERE decision='blocked'").fetchone()["n"]
+                "SELECT COUNT(*) AS n FROM audit_log WHERE decision='blocked'"
+            ).fetchone()["n"]
         return {
-            "products": products, "orders": orders, "paid_orders": paid,
-            "gmv_paise": gmv, "gmv_rupees": round(gmv / 100, 2),
-            "blocked_actions": blocked, "audit_events": audit.count(),
+            "products": products,
+            "orders": orders,
+            "paid_orders": paid,
+            "gmv_paise": gmv,
+            "gmv_rupees": round(gmv / 100, 2),
+            "blocked_actions": blocked,
+            "audit_events": audit.count(),
         }
 
     # --------------------------------------------------------------- helpers

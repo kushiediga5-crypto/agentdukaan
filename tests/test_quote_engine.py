@@ -1,4 +1,5 @@
 """Deterministic pricing engine — GST math, shipping zones, totals."""
+
 import pytest
 
 from agentdukaan import quote_engine as qe
@@ -17,8 +18,8 @@ def test_shipping_free_above_threshold():
 
 
 def test_shipping_metro_vs_rest():
-    assert qe.shipping_fee(50_000, "600001") == qe.SHIPPING_METRO_PAISE      # Chennai
-    assert qe.shipping_fee(50_000, "627001") == qe.SHIPPING_REST_PAISE       # Tirunelveli
+    assert qe.shipping_fee(50_000, "600001") == qe.SHIPPING_METRO_PAISE  # Chennai
+    assert qe.shipping_fee(50_000, "627001") == qe.SHIPPING_REST_PAISE  # Tirunelveli
 
 
 def test_pincode_validation():

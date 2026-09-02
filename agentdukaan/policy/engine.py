@@ -6,6 +6,7 @@ Design invariants:
      the full check list for every decision, pass OR fail.
   3. Fail-closed: unknown state => block, never allow.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -59,7 +60,7 @@ def evaluate_payment(
     """
     checks: list[Check] = []
 
-    payable = order_status in ("created", "payment_blocked")
+    payable = order_status in ("created", "payment_blocked", "rejected")
     checks.append(Check("order_payable", payable, f"order status = {order_status}"))
 
     cap_ok = amount_paise <= settings.per_txn_cap_paise
@@ -96,7 +97,10 @@ def evaluate_payment(
         )
 
     approved = all(c.passed for c in checks)
-    requires_approval = settings.approval_threshold_paise == 0 or amount_paise > settings.approval_threshold_paise
+    requires_approval = (
+        settings.approval_threshold_paise == 0
+        or amount_paise > settings.approval_threshold_paise
+    )
 
     block_reason = None
     if not approved:
